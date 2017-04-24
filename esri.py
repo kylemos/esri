@@ -1,16 +1,11 @@
 """
 Class for reading and manipulating ESRI ASCII-format rasters.
 """
-
 import os
 import numpy as np
 from weakref import WeakKeyDictionary
 
 class NonNegative(object):
-
-    """
-    Decriptor for non-negative integer attributes.
-    """
     
     def __init__(self, default):
         self.default = default
@@ -32,11 +27,6 @@ class AsciiGrid(object):
     """
     ESRI ASCII-format raster class.
     
-    Example:
-        dem = AsciiGrid('dem.asc')
-        print dem.ncols, dem.nrows
-        dem.write('dem_plus_1.asc')
-    
     Attributes:
         ncols (int):        Number of columns in AsciiGrid (read-only).
         nrows (int):        Number of rows in AsciiGrid (read-only).
@@ -47,16 +37,16 @@ class AsciiGrid(object):
         data (np.ndarray):  Raster array with no-data values represented as numpy.nan's.
     
     TODO:
+        * Create a context manager and __iter__ method? i.e. to do with AsciiGrid as x, loop over x.cols???
         * See https://github.com/olemb/dbfread/blob/master/dbfread/dbf.py for example!
-        * Options in write() to specify xllcorner vs. xllcenter
-        * Implement __repr__() and __str__() methods.
+        * Option in write() method to specify xllcorner vs. xllcenter
         * Error-checking on filepaths for read, write methods.
-        * Implement some way to compare grids (i.e. __eq__, same_extents(), etc...).
+        * Implement some way to compare grids (i.e. __eq__, etc...).
         * Implement a 'change_no_data_val' method:
           --> Can probably do this with a @property or something similar? So just 'step in' when
               the no_data_val attribute is changed and change it in the data data too :).
-        * Replace add_grid() method with __add__().
-        * Implement a way to access data via own coordinate system???
+        * Replace add_grid() method with __add__()?
+        * REPLACE value_at(x,y) METHOD TO __getitem__() method?
     """
     
     # version number
@@ -100,7 +90,7 @@ class AsciiGrid(object):
     def __init__(self, xllcorner=0, yllcorner=0, cellsize=1, 
                  no_data_val=-9999, data=np.zeros((10,10))):
         """
-        Initialiser: Create an AsciiGrid raster object from kwargs and a numpy array. 
+        Create an AsciiGrid raster object from kwargs and a numpy array. 
         Defaults to a 10x10 grid of zeros.
         """
         self.xllcorner = xllcorner
@@ -110,14 +100,18 @@ class AsciiGrid(object):
         self.data = np.where(data == no_data_val, np.nan, data)
         
     
-    # TODO: def __repr__(self):
-    # TODO: def __str(self)__:
+    def __repr__(self):
+        
+        return '{}'.format(self.__class__.__name__)
+        
     
-        # """Pretty-print ascii-grid object."""
-
-        # print 'xllcorner: {s.xllcorner:d}'.format(s=self)
-        # print 'yllcorner: {s.yllcorner:d}'.format(s=self)
-    
+    def __str__(self):
+        
+        s1 = '{0}x{1} AsciiGrid'.format(self.ncols, self.nrows)
+        s2 = 'xll: {0}, yll: {1}'.format(self.xllcorner, self.yllcorner)
+        s3 = 'cellsize: {0}'.format(self.cellsize)
+        return ', '.join([s1,s2,s3])
+        
     
     def read(self, filename):
     
@@ -125,28 +119,6 @@ class AsciiGrid(object):
         
         return AsciiGrid.fromfile(filename)
         
-        # try:
-            # fh = open(filename, 'rb')
-        # except IOError:
-            # print 'can\'t find or read ASCII raster file.'
-        # else:
-            # # read header data
-            # self.ncols = int(fh.readline().split()[1])
-            # self.nrows = int(fh.readline().split()[1])
-            # self.xllcorner = int(float(fh.readline().split()[1]))
-            # self.yllcorner = int(float(fh.readline().split()[1]))
-            # self.cellsize = int(float(fh.readline().split()[1]))
-            # self.no_data_val = float(fh.readline().split()[1])
-            
-            # # read raster data
-            # arr = np.fromfile(fh, dtype=float, count=-1, sep=' ')
-            # self.data = np.reshape(arr, (self.nrows, self.ncols))
-            
-            # # close handle
-            # fh.close()
-            
-            # return self
-            
     
     @classmethod
     def fromfile(cls, filename):
@@ -193,7 +165,7 @@ class AsciiGrid(object):
         else:
             return cls(xllcorner=xllcorner, yllcorner=yllcorner, cellsize=cellsize, 
                        no_data_val=no_data_val, data=data)
-    
+            
     
     def write(self, filename, precision=2):
     
@@ -227,7 +199,7 @@ class AsciiGrid(object):
         h = {k:v for k,v in vars(self).iteritems() if k != 'data'}
         return h
         
-        
+    
     def add_grid(self, newAsciiGrid):
     # def __add__(self, newAsciiGrid):
     
@@ -240,12 +212,12 @@ class AsciiGrid(object):
             # print 'Error: grid must have same shape as Ascii raster grid.'
             # raise Exception
     
-        try:
-            self.data += newAsciiGrid.data
-        except:
-            print 'error: cannot add grids'
+        # try:
+        self.data += newAsciiGrid.data
+        # except <some_error>:
+            # print 'error: cannot add grids'
         
-        
+    
     def clip(self, xmin=None, xmax=None, ymin=None, ymax=None):
     
         """Clips the raster to specified limits (xmin, xmax, ymin & ymax)."""
@@ -304,7 +276,7 @@ class AsciiGrid(object):
                 fh.write(''.join([str(yl+iy*cs),' ',str(xl+ix*cs),' ',str(it[0]),'\n']))
                 it.iternext()
                 
-                
+    
     def value_at(self, x, y):
    
         """Return value at (x,y), specified in grid coordinates."""
@@ -323,7 +295,30 @@ class AsciiGrid(object):
             return self.data[self.nrows-yl-1, xl-1]
         except IndexError:
             print 'Coordinates lie outside raster area'
-                
+            
+            
+    # def __hash__(self):
+    
+        # return ((self.cellsize, self.no_data_val))# self.data.tostring()))
+            
+    
+    # def __eq__(self, other):
+    
+        # if isinstance(other, self.__class__):
+            # eq = (np.array_equal(self.data, other.data) and
+                  # self.ncols == other.ncols             and 
+                  # self.nrows == other.nrows             and
+                  # self.xllcorner == other.xllcorner     and
+                  # self.yllcorner == other.yllcorner     and
+                  # self.cellsize == other.cellsize       and
+                  # self.no_data_val == other.no_data_val)
+            # return eq
+        # return NotImplemented
+            
+    
+    # def __ne__(self, other):
+    
+        # return not self == other
                 
     
 # test client
