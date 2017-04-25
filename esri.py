@@ -1,7 +1,7 @@
 """
-Class for reading and manipulating ESRI ASCII-format rasters.
+Class for handling ESRI ASCII-format rasters.
 """
-import os
+import os.path as pth
 import numpy as np
 from weakref import WeakKeyDictionary
 
@@ -40,13 +40,13 @@ class AsciiGrid(object):
         * Create a context manager and __iter__ method? i.e. to do with AsciiGrid as x, loop over x.cols???
         * See https://github.com/olemb/dbfread/blob/master/dbfread/dbf.py for example!
         * Option in write() method to specify xllcorner vs. xllcenter
-        * Error-checking on filepaths for read, write methods.
-        * Implement some way to compare grids (i.e. __eq__, etc...).
+        * Option in to_xyz() method to specify precision?
+        * Implement some way to compare grids (i.e. __eq__ etc...).
         * Implement a 'change_no_data_val' method:
           --> Can probably do this with a @property or something similar? So just 'step in' when
-              the no_data_val attribute is changed and change it in the data data too :).
+              the no_data_val attribute is changed and change it in the data attribute too?
         * Replace add_grid() method with __add__()?
-        * REPLACE value_at(x,y) METHOD TO __getitem__() method?
+        * REPLACE value_at(x,y) METHOD TO __getitem__() ?
     """
     
     # version number
@@ -68,31 +68,33 @@ class AsciiGrid(object):
         
     @property
     def no_data_val(self):
-        return self._no_data_val
+        return self.__no_data_val
         
     @no_data_val.setter
     def no_data_val(self, value):
         if not isinstance(value, int):
-            raise ValueError('no_data_val must take an integer value: {}'.format(value))
-        self._no_data_val = value
+            raise ValueError('no_data_val must be an integer value: {}'.format(value))
+        self.__no_data_val = value
         
     @property
     def data(self):
-        return self._data
+        return self.__data
         
     @data.setter
     def data(self, arr):
         if not isinstance(arr, np.ndarray):
             raise TypeError('data attribute must be a numpy.ndarray object')
-        self._data = np.copy(arr)
+        self.__data = np.copy(arr)
     
     
     def __init__(self, xllcorner=0, yllcorner=0, cellsize=1, 
                  no_data_val=-9999, data=np.zeros((10,10))):
+                 
         """
-        Create an AsciiGrid raster object from kwargs and a numpy array. 
+        Creates an AsciiGrid raster object from kwargs and a numpy array. 
         Defaults to a 10x10 grid of zeros.
         """
+        
         self.xllcorner = xllcorner
         self.yllcorner = yllcorner
         self.cellsize = cellsize
@@ -151,7 +153,7 @@ class AsciiGrid(object):
             else:
                 yllcorner = int(d_hd.pop('yllcenter') - cellsize*0.5)
         except KeyError:
-            print 'Missing header entries in file'
+            print 'Missing headers in file'
             raise
         if d_hd:
             raise TypeError('Unexpected header entries found in file: {}'.format(d_hd.keys()))
@@ -160,7 +162,7 @@ class AsciiGrid(object):
         try:
             data = np.reshape(arr, (nrows,ncols))
         except ValueError:
-            print 'NROWS, NCOLS inconsistent with raster array size'
+            print 'nrows, ncols inconsistent with raster array shape'
             raise
         else:
             return cls(xllcorner=xllcorner, yllcorner=yllcorner, cellsize=cellsize, 
@@ -169,13 +171,13 @@ class AsciiGrid(object):
     
     def write(self, filename, precision=2):
     
-        """Writes the raster to ascii-format file specified in first argument (filename)."""
+        """Writes the raster to ESRI ASCII-format file specified in first argument."""
         
-        # # check filename
-        # if not os.path.isdir(filename):
-            # raise IOError('filepath not recognised: {}'.format(filename))
+        # check filename arg
+        if not pth.isdir(pth.dirname(filename)):
+            raise IOError('filepath not recognised: {}'.format(filename))
         
-        # check precision
+        # check precision arg
         if not isinstance(precision, int):
             raise ValueError('precision argument takes an integer value: {}'.format(precision))
         fmt = '%1.'+str(int(precision))+'f'
@@ -188,20 +190,11 @@ class AsciiGrid(object):
                           'cellsize      ',str(self.cellsize),'\n',
                           'NODATA_value  ',str(self.no_data_val)])
         
-        # write grid data
+        # write header, raster to file
         np.savetxt(filename, self.data, delimiter=' ', header=header, fmt=fmt, comments='')
         
     
-    def get_headers(self):
-    
-        """Returns headers as a dict."""
-        
-        h = {k:v for k,v in vars(self).iteritems() if k != 'data'}
-        return h
-        
-    
     def add_grid(self, newAsciiGrid):
-    # def __add__(self, newAsciiGrid):
     
         """Adds an AsciiGrid raster."""
         
@@ -223,27 +216,23 @@ class AsciiGrid(object):
         """Clips the raster to specified limits (xmin, xmax, ymin & ymax)."""
         
         # sanity-check clipping limits:
-        #  1. must be numeric
-        try:
-            int(xmin); int(xmax); int(ymin); int(ymax)
-        except ValueError:
-            print 'Error: non-numerical value specified for clipping limits'
+        # integer args
+        if not all(isinstance(arg, int) for arg in [xmin,xmax,ymin,ymax]):
+            raise ValueError('Non-numerical value specified in clipping limits')
         
-        #  2. must align with grid (i.e. be a multiple of cellsize removed from llcorner)
+        # align with grid (i.e. be a multiple of cellsize removed from llcorner)
         for arg in [xmin-self.xllcorner, xmax-self.xllcorner, ymin-self.yllcorner, ymax-self.yllcorner]:
-            if arg%self.cellsize != 0:
-                print 'Error: clipping limits must align with raster origin/cellsize'
-                return
+            if arg % self.cellsize != 0:
+                raise  ValueError('Clipping limits must align with raster origin & cellsize')
         
-        #  3. must have max > min for x and y
-        if xmin >= xmax or ymin >= ymax: 
-            print 'Error: check clipping limits - maxs must be greater than mins'
-            return
+        # max > min for both x and y
+        if xmin >= xmax or ymin >= ymax:
+            raise ValueError('Inconsistent clipping limits: max must be greater than min')
         
         # rationalise clipping limits if they lie outside raster limits
         gxmax, gymax = self.xllcorner + self.ncols*self.cellsize, self.yllcorner + self.nrows*self.cellsize
         if xmin < self.xllcorner or ymin < self.yllcorner or xmax > (gxmax) or ymax > (gymax):
-            print 'Warning: some clipping limits lie outside raster extents - defaulting these to raster extents.'
+            print 'Warning: some clipping limits lie outside raster extents -> defaulted to raster extents.'
             xmin, ymin = max(xmin, self.xllcorner), max(ymin, self.yllcorner)
             xmax, ymax = min(xmax, gxmax), min(ymax, gymax)
         
@@ -253,53 +242,73 @@ class AsciiGrid(object):
         ytop = self.data.shape[0]
         self.data = self.data[ytop-iymax:ytop-iymin, ixmin:ixmax]
         
-        # reset llcorner coords, ncols, nrows
+        # reset llcorner
         if xmin > self.xllcorner: self.xllcorner = xmin
         if ymin > self.yllcorner: self.yllcorner = ymin
-        self.ncols = (xmax - xmin)/self.cellsize
-        self.nrows = (ymax - ymin)/self.cellsize
     
     
-    def write_to_xyz(self, filename):
+    def to_xyz(self, filename):
         
         """Writes AsciiGrid object to an .xyz format file."""
         
-        # correct filename extension if necessary
-        if not filename.endswith('.xyz'): filename.append('.xyz')
+        # correct file extension if required
+        if not filename.endswith('.xyz'): 
+            filename.append('.xyz')
         
-        # write points to xyz
+        # write points to file
         xl,yl,cs = self.xllcorner, self.yllcorner, self.cellsize
         it = np.nditer(self.data, flags=['multi_index'], op_flags=['readonly'])
-        with open(filename, 'wb') as fh:
+        with open(filename, 'w') as fh:
             while not it.finished:
                 iy,ix = it.multi_index
-                fh.write(''.join([str(yl+iy*cs),' ',str(xl+ix*cs),' ',str(it[0]),'\n']))
+                fh.write(' '.join([str(yl+iy*cs),str(xl+ix*cs),str(it[0]),'\n']))
                 it.iternext()
                 
     
-    def value_at(self, x, y):
+    def value_at(self, x, y, interpolate=True):
    
-        """Return value at (x,y), specified in grid coordinates."""
+        """
+        Return value at (x,y), where x & y are specified in grid coordinates.
+       
+        Keyword arguments:
+            interpolate - Set True to return bilinear interpolation in x & y
+                          between 4 nearest data nodes.                       
+        """
        
         # check inputs
         if not (isinstance(x,int) and isinstance(y,int)):
             raise ValueError('x, y args must be integers: {},{}'.format(x,y))
            
         # calculate local coords: subtract xll/yll and divide by cellsize
-        xl,yl = x-self.xllcorner, y-self.yllcorner
-        xl /= self.cellsize
-        yl /= self.cellsize
+        xo,yo = x-self.xllcorner, y-self.yllcorner
+        xl = int(math.floor(xo/self.cellsize))
+        yl = int(math.floor(yo/self.cellsize))
        
-        # check if outside raster
+        # calculate fractional
+        if interpolate:
+            xf,yf = xo-xl, yo-yl
+       
+        # check if outside raster area
         try:
-            return self.data[self.nrows-yl-1, xl-1]
+            ll = self.data[self.nrows-(yl+1), xl  ]
+            lr = self.data[self.nrows-(yl+1), xl+1]
+            ul = self.data[self.nrows-yl,     xl  ]
+            ur = self.data[self.nrows-yl,     xl+1]
         except IndexError:
             print 'Coordinates lie outside raster area'
-            
-            
-    # def __hash__(self):
-    
-        # return ((self.cellsize, self.no_data_val))# self.data.tostring()))
+            return None
+       
+        # return (and interpolate if requested)
+        if interpolate:
+            return AsciiGrid.interpolate(ll,lr,ul,ur,xf,yf)
+        else:
+            return ll
+           
+        
+    @staticmethod
+    def interpolate(ll,lr,ul,ur,xf,yf):
+   
+        """bilinear interpolation..."""
             
     
     # def __eq__(self, other):
