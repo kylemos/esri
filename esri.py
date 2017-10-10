@@ -1,6 +1,7 @@
 """
 Class for handling ESRI ASCII-format rasters.
 """
+from __future__ import print_function
 import os.path as pth
 import numpy as np
 from weakref import WeakKeyDictionary
@@ -37,6 +38,7 @@ class AsciiGrid(object):
         data (np.ndarray):  Raster array with no-data values represented as numpy.nan's.
     
     TODO:
+        * Use decorators to enable argument-checking on methods? Write as both function & class to learn!
         * Create a context manager and __iter__ method? i.e. to do with AsciiGrid as x, loop over x.cols???
         * See https://github.com/olemb/dbfread/blob/master/dbfread/dbf.py for example!
         * Option in write() method to specify xllcorner vs. xllcenter
@@ -68,13 +70,14 @@ class AsciiGrid(object):
         
     @property
     def no_data_val(self):
-        return self.__no_data_val
+        # (protected attribute)
+        return self._no_data_val
         
     @no_data_val.setter
     def no_data_val(self, value):
         if not isinstance(value, int):
             raise ValueError('no_data_val must be an integer value: {}'.format(value))
-        self.__no_data_val = value
+        self._no_data_val = value
         
     @property
     def data(self):
@@ -131,7 +134,7 @@ class AsciiGrid(object):
         try:
             fh = open(filename, 'r')
         except IOError:
-            print 'File not found/error reading file'
+            print('File not found/error reading file')
         else:
             hdrs = [fh.readline().split() for i in xrange(6)]
             arr = np.fromfile(fh, dtype=float, count=-1, sep=' ')
@@ -153,7 +156,7 @@ class AsciiGrid(object):
             else:
                 yllcorner = int(d_hd.pop('yllcenter') - cellsize*0.5)
         except KeyError:
-            print 'Missing headers in file'
+            print('Missing headers in file')
             raise
         if d_hd:
             raise TypeError('Unexpected header entries found in file: {}'.format(d_hd.keys()))
@@ -162,7 +165,7 @@ class AsciiGrid(object):
         try:
             data = np.reshape(arr, (nrows,ncols))
         except ValueError:
-            print 'nrows, ncols inconsistent with raster array shape'
+            print('nrows, ncols inconsistent with raster array shape')
             raise
         else:
             return cls(xllcorner=xllcorner, yllcorner=yllcorner, cellsize=cellsize, 
@@ -202,13 +205,13 @@ class AsciiGrid(object):
         
         # error checking
         # if newAsciiGrid.shape != self.data.shape:
-            # print 'Error: grid must have same shape as Ascii raster grid.'
+            # print('Error: grid must have same shape as Ascii raster grid.')
             # raise Exception
     
         # try:
         self.data += newAsciiGrid.data
         # except <some_error>:
-            # print 'error: cannot add grids'
+            # print('error: cannot add grids')
         
     
     def clip(self, xmin=None, xmax=None, ymin=None, ymax=None):
@@ -232,7 +235,7 @@ class AsciiGrid(object):
         # rationalise clipping limits if they lie outside raster limits
         gxmax, gymax = self.xllcorner + self.ncols*self.cellsize, self.yllcorner + self.nrows*self.cellsize
         if xmin < self.xllcorner or ymin < self.yllcorner or xmax > (gxmax) or ymax > (gymax):
-            print 'Warning: some clipping limits lie outside raster extents -> defaulted to raster extents.'
+            print('Warning: some clipping limits lie outside raster extents -> defaulted to raster extents.')
             xmin, ymin = max(xmin, self.xllcorner), max(ymin, self.yllcorner)
             xmax, ymax = min(xmax, gxmax), min(ymax, gymax)
         
@@ -295,7 +298,7 @@ class AsciiGrid(object):
             ul = self.data[self.nrows-yl,     xl  ]
             ur = self.data[self.nrows-yl,     xl+1]
         except IndexError:
-            print 'Coordinates lie outside raster area'
+            print('Coordinates lie outside raster area')
             return None
        
         # return (and interpolate if requested)
@@ -332,11 +335,13 @@ class AsciiGrid(object):
     
 # test client
 if __name__ == "__main__":
+
+    pass
     
-    grid = AsciiGrid()
-    data = np.vstack([np.arange(1,6), np.arange(6,11), np.arange(11,16),
-                      np.arange(16,21), np.arange(21,26)])
-    grid2 = AsciiGrid(xllcorner=10, yllcorner=10, cellsize=5, data=data)
-    grid3 = AsciiGrid.fromfile('example.asc')
-    grid4 = AsciiGrid().read('example2.asc')
+    # grid = AsciiGrid()
+    # data = np.vstack([np.arange(1,6), np.arange(6,11), np.arange(11,16),
+                      # np.arange(16,21), np.arange(21,26)])
+    # grid2 = AsciiGrid(xllcorner=10, yllcorner=10, cellsize=5, data=data)
+    # grid3 = AsciiGrid.fromfile('example.asc')
+    # grid4 = AsciiGrid().read('example2.asc')
 
